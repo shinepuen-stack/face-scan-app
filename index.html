@@ -7,6 +7,7 @@
   
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   
   <style>
     :root {
@@ -35,6 +36,8 @@
     .video-wrapper.success { border-color: var(--success); }
     .video-wrapper.error { border-color: var(--danger); }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0px rgba(39,174,96,0.4); } 70% { box-shadow: 0 0 0 10px rgba(39,174,96,0); } 100% { box-shadow: 0 0 0 0px rgba(39,174,96,0); } }
+    
+    /* แก้กล้องกลับด้านตรงนี้ */
     video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
     
     #statusBar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); min-width: 320px; padding: 15px 20px; border-radius: 50px; background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 900; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 600; }
@@ -122,14 +125,11 @@
         startApp();
       } catch (err) {
         document.getElementById('loadingOverlay').innerHTML = `<i class="fa-solid fa-times-circle" style="font-size:40px; color:var(--danger); margin-bottom:20px;"></i><div style="color:var(--danger); font-weight:600;">โหลด AI ล้มเหลว</div><div style="font-size:12px; color:var(--text-light); margin-top:5px;">โปรดเช็คอินเทอร์เน็ตแล้วกด F5</div>`;
-        console.error("Model Load Error:", err);
       }
     };
 
     async function startApp() {
-      // 🚨 บังคับซ่อนหน้าจอโหลดทิ้งด้วย JavaScript 🚨
       document.getElementById('loadingOverlay').style.display = 'none';
-      
       setStatus("loading", "กำลังดึงข้อมูลพนักงานจากระบบ...");
       try {
         const res = await fetch(GAS_URL + "?action=getFaces");
@@ -146,8 +146,7 @@
         document.getElementById('navMenu').classList.remove('hidden');
         getLocation();
       } catch (e) { 
-        setStatus("error", "เชื่อมต่อฐานข้อมูลล้มเหลว (เช็คสิทธิ์ Anyone)"); 
-        console.error("GAS Error:", e);
+        setStatus("error", "เชื่อมต่อฐานข้อมูลล้มเหลว"); 
       }
     }
 
@@ -171,7 +170,6 @@
         document.getElementById(id).srcObject = stream;
       } catch (e) {
         setStatus("error", "ไม่สามารถเปิดกล้องได้ โปรดอนุญาตการเข้าถึงกล้อง");
-        console.error("Camera Error:", e);
       }
     }
 
@@ -190,7 +188,12 @@
     async function registerFace() {
       const name = document.getElementById('regName').value.trim();
       const pos = document.getElementById('regPos').value.trim();
-      if (!name || !pos) { alert("กรุณากรอกชื่อและตำแหน่งให้ครบ"); return; }
+      
+      if (!name || !pos) { 
+        // ใช้ SweetAlert เตือนเมื่อกรอกข้อมูลไม่ครบ
+        Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบถ้วน', text: 'กรุณากรอกชื่อและตำแหน่งให้ครบครับ', confirmButtonColor: '#27ae60' });
+        return; 
+      }
       
       const btn = document.getElementById('btnRegister');
       btn.disabled = true;
@@ -200,7 +203,8 @@
       const detection = await faceapi.detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
       
       if (!detection) { 
-        setStatus("error", "ไม่พบใบหน้า กรุณาให้หน้าชัดเจนแล้วกดบันทึกใหม่"); 
+        Swal.fire({ icon: 'error', title: 'ไม่พบใบหน้า', text: 'กรุณาให้ใบหน้าอยู่ในกรอบชัดเจน แล้วกดบันทึกใหม่ครับ', confirmButtonColor: '#e74c3c' });
+        setStatus("error", "ไม่พบใบหน้า");
         btn.disabled = false; return; 
       }
       
@@ -220,15 +224,19 @@
       try {
         const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
         const result = await res.json();
-        alert(result.message); 
+        
+        // ใช้ SweetAlert แจ้งเมื่อลงทะเบียนสำเร็จ
+        await Swal.fire({ icon: 'success', title: 'ลงทะเบียนสำเร็จ!', text: result.message, confirmButtonColor: '#27ae60' });
         location.reload();
       } catch (e) {
+        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ไม่สามารถลงทะเบียนได้ โปรดลองอีกครั้ง', confirmButtonColor: '#e74c3c' });
         setStatus("error", "เกิดข้อผิดพลาดในการลงทะเบียน");
         btn.disabled = false;
       }
     }
 
-    function checkTimeCondition(type) {
+    // แก้ไขฟังก์ชันเป็น async เพื่อรองรับ SweetAlert Input
+    async function checkTimeCondition(type) {
       const h = new Date().getHours(), m = new Date().getMinutes();
       if (type === 'in') {
         if (h < 8) return { status: 'ปกติ', reason: '-' };
@@ -236,7 +244,20 @@
         return { status: 'ขาดงาน', reason: '-' }; 
       } else {
         if (h >= 16) return { status: 'ปกติ', reason: '-' };
-        const reason = prompt("แจ้งเตือน: คุณกำลังออกงานก่อน 16:00 น.\nกรุณาระบุเหตุผล:");
+        
+        // ใช้ SweetAlert แบบกรอกข้อความ (Input)
+        const { value: reason } = await Swal.fire({
+          title: 'ออกก่อนเวลา!',
+          text: 'คุณกำลังลงเวลาออกงานก่อน 16:00 น. กรุณาระบุเหตุผล:',
+          input: 'text',
+          inputPlaceholder: 'พิมพ์เหตุผลที่นี่...',
+          showCancelButton: true,
+          confirmButtonText: 'ยืนยัน',
+          cancelButtonText: 'ยกเลิก',
+          confirmButtonColor: '#27ae60',
+          cancelButtonColor: '#e74c3c'
+        });
+        
         return (!reason || reason.trim() === "") ? null : { status: 'ออกก่อนเวลา', reason: reason };
       }
     }
@@ -262,7 +283,8 @@
             wrapper.classList.add('success');
             
             const type = document.querySelector('input[name="scanType"]:checked').value;
-            const timeCheck = checkTimeCondition(type);
+            // ใส่ await เข้าไปให้รอ SweetAlert กรอกเสร็จ
+            const timeCheck = await checkTimeCondition(type);
             
             if (!timeCheck) {
                setStatus("error", "❌ ยกเลิก: ไม่ได้ระบุเหตุผล");
@@ -286,10 +308,20 @@
                 }) 
               });
               const result = await res.json();
-              alert(result.message); 
+              
+              // แจ้งเตือนแบบไม่มีปุ่มปิด (ตั้งเวลาปิดเอง 2.5 วินาที)
+              await Swal.fire({
+                icon: 'success',
+                title: 'บันทึกเวลาสำเร็จ!',
+                text: `${match.label} - ${result.message}`,
+                timer: 2500,
+                showConfirmButton: false
+              });
+
               wrapper.classList.remove('success');
-              setTimeout(() => { isScanning = true; recognizeFaces(); }, 3000);
+              isScanning = true; recognizeFaces();
             } catch (e) {
+              Swal.fire({ icon: 'error', title: 'บันทึกเวลาล้มเหลว', text: 'โปรดลองสแกนใหม่อีกครั้ง', confirmButtonColor: '#e74c3c' });
               setStatus("error", "บันทึกเวลาล้มเหลว");
               wrapper.classList.remove('success');
               setTimeout(() => { isScanning = true; recognizeFaces(); }, 3000);
