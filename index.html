@@ -21,7 +21,6 @@
     .container { max-width: 480px; margin: 20px auto 100px auto; background: var(--bg-card); padding: 30px; border-radius: var(--radius); box-shadow: var(--shadow-soft); }
     h2 { color: var(--primary); font-weight: 700; margin-top: 0; }
     
-    /* Overlay สำหรับโหลดข้อมูล */
     #loadingOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
     .spinner { border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -37,7 +36,6 @@
     .video-wrapper.error { border-color: var(--danger); }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0px rgba(39,174,96,0.4); } 70% { box-shadow: 0 0 0 10px rgba(39,174,96,0); } 100% { box-shadow: 0 0 0 0px rgba(39,174,96,0); } }
     
-    /* แก้กล้องกลับด้านตรงนี้ */
     video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
     
     #statusBar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); min-width: 320px; padding: 15px 20px; border-radius: 50px; background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 900; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 600; }
@@ -57,7 +55,6 @@
     
     .btn-action { background: var(--secondary); color: white; border: none; padding: 16px; width: 100%; border-radius: 50px; font-weight: 700; cursor: pointer; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; }
     .btn-action:disabled { background-color: #bdc3c7; cursor: not-allowed; }
-    
     .hidden { display: none !important; }
   </style>
 </head>
@@ -175,25 +172,15 @@
 
     function getLocation() {
       navigator.geolocation.getCurrentPosition(
-        p => {
-          currentLat = p.coords.latitude; currentLng = p.coords.longitude;
-          document.getElementById('gpsStatus').innerHTML = '<i class="fa-solid fa-location-dot" style="color:var(--primary)"></i> ดึงพิกัด GPS สำเร็จ';
-        },
-        e => {
-          document.getElementById('gpsStatus').innerHTML = '<i class="fa-solid fa-exclamation-triangle" style="color:var(--warning)"></i> โปรดเปิด GPS (Location)';
-        }
+        p => { currentLat = p.coords.latitude; currentLng = p.coords.longitude; document.getElementById('gpsStatus').innerHTML = '<i class="fa-solid fa-location-dot" style="color:var(--primary)"></i> ดึงพิกัด GPS สำเร็จ'; },
+        e => { document.getElementById('gpsStatus').innerHTML = '<i class="fa-solid fa-exclamation-triangle" style="color:var(--warning)"></i> โปรดเปิด GPS (Location)'; }
       );
     }
 
     async function registerFace() {
       const name = document.getElementById('regName').value.trim();
       const pos = document.getElementById('regPos').value.trim();
-      
-      if (!name || !pos) { 
-        // ใช้ SweetAlert เตือนเมื่อกรอกข้อมูลไม่ครบ
-        Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบถ้วน', text: 'กรุณากรอกชื่อและตำแหน่งให้ครบครับ', confirmButtonColor: '#27ae60' });
-        return; 
-      }
+      if (!name || !pos) { Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบถ้วน', text: 'กรุณากรอกชื่อและตำแหน่งให้ครบครับ', confirmButtonColor: '#27ae60' }); return; }
       
       const btn = document.getElementById('btnRegister');
       btn.disabled = true;
@@ -204,8 +191,7 @@
       
       if (!detection) { 
         Swal.fire({ icon: 'error', title: 'ไม่พบใบหน้า', text: 'กรุณาให้ใบหน้าอยู่ในกรอบชัดเจน แล้วกดบันทึกใหม่ครับ', confirmButtonColor: '#e74c3c' });
-        setStatus("error", "ไม่พบใบหน้า");
-        btn.disabled = false; return; 
+        setStatus("error", "ไม่พบใบหน้า"); btn.disabled = false; return; 
       }
       
       setStatus("loading", "กำลังส่งข้อมูลลงทะเบียน...");
@@ -213,29 +199,19 @@
       canvas.width = videoEl.videoWidth; canvas.height = videoEl.videoHeight;
       canvas.getContext('2d').drawImage(videoEl, 0, 0);
       
-      const payload = { 
-        action: 'register', 
-        name: name, 
-        position: pos, 
-        descriptorStr: JSON.stringify(Array.from(detection.descriptor)), 
-        imageBase64: canvas.toDataURL('image/jpeg', 0.5) 
-      };
+      const payload = { action: 'register', name: name, position: pos, descriptorStr: JSON.stringify(Array.from(detection.descriptor)), imageBase64: canvas.toDataURL('image/jpeg', 0.5) };
       
       try {
         const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
         const result = await res.json();
-        
-        // ใช้ SweetAlert แจ้งเมื่อลงทะเบียนสำเร็จ
         await Swal.fire({ icon: 'success', title: 'ลงทะเบียนสำเร็จ!', text: result.message, confirmButtonColor: '#27ae60' });
         location.reload();
       } catch (e) {
         Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ไม่สามารถลงทะเบียนได้ โปรดลองอีกครั้ง', confirmButtonColor: '#e74c3c' });
-        setStatus("error", "เกิดข้อผิดพลาดในการลงทะเบียน");
-        btn.disabled = false;
+        setStatus("error", "เกิดข้อผิดพลาดในการลงทะเบียน"); btn.disabled = false;
       }
     }
 
-    // แก้ไขฟังก์ชันเป็น async เพื่อรองรับ SweetAlert Input
     async function checkTimeCondition(type) {
       const h = new Date().getHours(), m = new Date().getMinutes();
       if (type === 'in') {
@@ -244,20 +220,11 @@
         return { status: 'ขาดงาน', reason: '-' }; 
       } else {
         if (h >= 16) return { status: 'ปกติ', reason: '-' };
-        
-        // ใช้ SweetAlert แบบกรอกข้อความ (Input)
         const { value: reason } = await Swal.fire({
-          title: 'ออกก่อนเวลา!',
-          text: 'คุณกำลังลงเวลาออกงานก่อน 16:00 น. กรุณาระบุเหตุผล:',
-          input: 'text',
-          inputPlaceholder: 'พิมพ์เหตุผลที่นี่...',
-          showCancelButton: true,
-          confirmButtonText: 'ยืนยัน',
-          cancelButtonText: 'ยกเลิก',
-          confirmButtonColor: '#27ae60',
-          cancelButtonColor: '#e74c3c'
+          title: 'ออกก่อนเวลา!', text: 'คุณกำลังลงเวลาออกงานก่อน 16:00 น. กรุณาระบุเหตุผล:',
+          input: 'text', inputPlaceholder: 'พิมพ์เหตุผลที่นี่...', showCancelButton: true,
+          confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#27ae60', cancelButtonColor: '#e74c3c'
         });
-        
         return (!reason || reason.trim() === "") ? null : { status: 'ออกก่อนเวลา', reason: reason };
       }
     }
@@ -267,6 +234,7 @@
       const wrapper = document.getElementById('scanVideoWrapper');
       if (!isScanning || labeledFaceDescriptors.length === 0) return;
       
+      // ลดความเดาสุ่มลง (0.45 ต้องหน้าเหมือนตัวจริงถึงจะให้ผ่าน)
       const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.45);
       
       const interval = setInterval(async () => {
@@ -283,7 +251,6 @@
             wrapper.classList.add('success');
             
             const type = document.querySelector('input[name="scanType"]:checked').value;
-            // ใส่ await เข้าไปให้รอ SweetAlert กรอกเสร็จ
             const timeCheck = await checkTimeCondition(type);
             
             if (!timeCheck) {
@@ -297,26 +264,38 @@
             try {
               const res = await fetch(GAS_URL, { 
                 method: 'POST', 
-                body: JSON.stringify({ 
-                  action: 'attendance', 
-                  name: match.label, 
-                  typeStr: type === 'in' ? 'เข้า' : 'ออก', 
-                  statusStr: timeCheck.status, 
-                  reasonStr: timeCheck.reason, 
-                  lat: currentLat, 
-                  lng: currentLng 
-                }) 
+                body: JSON.stringify({ action: 'attendance', name: match.label, typeStr: type === 'in' ? 'เข้า' : 'ออก', statusStr: timeCheck.status, reasonStr: timeCheck.reason, lat: currentLat, lng: currentLng }) 
               });
               const result = await res.json();
               
-              // แจ้งเตือนแบบไม่มีปุ่มปิด (ตั้งเวลาปิดเอง 2.5 วินาที)
-              await Swal.fire({
-                icon: 'success',
-                title: 'บันทึกเวลาสำเร็จ!',
-                text: `${match.label} - ${result.message}`,
-                timer: 2500,
-                showConfirmButton: false
-              });
+              // วันที่และเวลาปัจจุบันสำหรับโชว์หน้าเว็บ
+              const now = new Date();
+              const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+              const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+              if (result.status === 'duplicate') {
+                // แจ้งเตือนเมื่อสแกนซ้ำไปแล้ว
+                await Swal.fire({
+                  icon: 'warning',
+                  title: 'สแกนซ้ำ!',
+                  html: `<b style="font-size:22px; color:var(--primary);">${match.label}</b><br><br>${result.message}`,
+                  confirmButtonText: 'ตกลง',
+                  confirmButtonColor: '#f39c12'
+                });
+              } else {
+                // แจ้งเตือนเมื่อบันทึกสำเร็จ โชว์ชื่อ วันที่ เวลา
+                await Swal.fire({
+                  icon: 'success',
+                  title: type === 'in' ? 'เข้างานสำเร็จ!' : 'ออกงานสำเร็จ!',
+                  html: `<div style="text-align:left; display:inline-block; margin-top:10px; background:#f4f6f9; padding:15px; border-radius:10px;">
+                           <b>👤 ชื่อ:</b> <span style="color:var(--primary); font-size:18px;">${match.label}</span><br>
+                           <b>📅 วันที่:</b> ${dateStr}<br>
+                           <b>⏰ เวลา:</b> ${timeStr} น.
+                         </div>`,
+                  timer: 3500,
+                  showConfirmButton: false
+                });
+              }
 
               wrapper.classList.remove('success');
               isScanning = true; recognizeFaces();
@@ -341,11 +320,7 @@
       const bar = document.getElementById('statusBar');
       const icon = document.getElementById('statusIcon');
       bar.className = 'info ' + (type === 'loading' ? 'info' : type);
-      
-      const icons = {
-        info: 'fa-solid fa-circle-info', success: 'fa-solid fa-check-circle',
-        error: 'fa-solid fa-times-circle', loading: 'fa-solid fa-spinner fa-spin'
-      };
+      const icons = { info: 'fa-solid fa-circle-info', success: 'fa-solid fa-check-circle', error: 'fa-solid fa-times-circle', loading: 'fa-solid fa-spinner fa-spin' };
       icon.className = icons[type];
       document.getElementById('statusText').innerText = msg;
       bar.classList.remove('hidden');
