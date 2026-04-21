@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบลงเวลาปฏิบัติงานด้วยใบหน้า (Modern Scan)</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    /* =========================================
+       1. Modern CSS Variables & Global Style (ธีมเขียวขาว)
+       ========================================= */
+    :root {
+      --primary: #27ae60; 
+      --primary-light: #eafaf1; 
+      --secondary: #16a085; 
+      --success: #2ecc71; 
+      --danger: #e74c3c; 
+      --warning: #f39c12; 
+      --bg-body: #f4f6f9; 
+      --bg-card: #ffffff; 
+      --text-dark: #2c3e50; 
+      --text-light: #7f8c8d; 
+      --shadow-soft: 0 10px 25px rgba(0,0,0,0.05); 
+      --radius: 12px; 
+      --transition: all 0.3s ease; 
+    }
+
+    body {
+      font-family: 'Segoe UI', 'Roboto', 'Noto Sans Thai', sans-serif;
+      text-align: center;
+      padding: 20px;
+      margin: 0;
+      background-color: var(--bg-body);
+      color: var(--text-dark);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 20px auto 100px auto; 
+      background: var(--bg-card);
+      padding: 30px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-soft);
+      position: relative;
+      transition: var(--transition);
+    }
+
+    h2 { color: var(--primary); margin-top: 0; margin-bottom: 10px; font-size: 24px; font-weight: 700; }
+    h3 { font-size: 18px; color: var(--text-dark); margin-bottom: 25px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; }
+    h3 i { color: var(--text-light); }
+
+    /* =========================================
+       4. Modern Loading Overlay (ตัวโหลด)
+       ========================================= */
+    #loadingOverlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.95);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 1000;
+      transition: var(--transition);
+    }
+    
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid var(--primary);
+      border-radius: 50%;
+      width: 40px; height: 40px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    /* =========================================
+       5. Modern Nav Tabs & Buttons
+       ========================================= */
+    .nav-tabs { display: flex; gap: 10px; margin-bottom: 25px; background-color: #eee; padding: 5px; border-radius: 50px; }
+    .nav-btn { flex: 1; padding: 12px; border: none; cursor: pointer; font-size: 15px; font-weight: 600; border-radius: 50px; background: transparent; color: var(--text-light); transition: var(--transition); display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .nav-btn.active.scan-page { background-color: var(--primary); color: white; box-shadow: 0 4px 10px rgba(39, 174, 96, 0.3); }
+    .nav-btn.active.register-page { background-color: var(--secondary); color: white; box-shadow: 0 4px 10px rgba(22, 160, 133, 0.3); }
+
+    /* =========================================
+       6. Video Wrapper
+       ========================================= */
+    .video-wrapper {
+      position: relative; width: 100%; aspect-ratio: 4/3; border-radius: var(--radius);
+      overflow: hidden; background-color: #000; border: 3px solid #eee; margin-bottom: 15px; transition: var(--transition);
+    }
+    .video-wrapper.scanning { border-color: var(--primary); animation: pulseBorder 1.5s infinite; }
+    .video-wrapper.success { border-color: var(--success); }
+    .video-wrapper.error { border-color: var(--danger); }
+    @keyframes pulseBorder { 0% { box-shadow: 0 0 0 0px rgba(39, 174, 96, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); } 100% { box-shadow: 0 0 0 0px rgba(39, 174, 96, 0); } }
+    video { width: 100%; height: 100%; object-fit: cover; }
+
+    /* =========================================
+       7. Status Bars
+       ========================================= */
+    #statusBar {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); min-width: 320px;
+      padding: 15px 20px; border-radius: 50px; background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      z-index: 900; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 600; transition: var(--transition);
+    }
+    #statusIcon { font-size: 20px; }
+    #statusBar.info { background-color: white; color: var(--primary); border: 1px solid var(--primary-light); }
+    #statusBar.success { background-color: #eafaf1; color: var(--success); border: 1px solid #d4efdf; }
+    #statusBar.error { background-color: #fdf2f2; color: var(--danger); border: 1px solid #fadbd8; }
+    
+    #gpsStatus { font-size: 13px; color: var(--text-light); margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    #gpsIcon { color: var(--text-light); }
+    #gpsStatus.active #gpsIcon { color: var(--primary); }
+
+    /* =========================================
+       8. Inputs
+       ========================================= */
+    .radio-group input[type="radio"] { display: none; }
+    .radio-group label { flex: 1; padding: 12px; background-color: #eee; color: var(--text-light); cursor: pointer; font-weight: 600; transition: var(--transition); display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .radio-group label:first-child { border-top-left-radius: 50px; border-bottom-left-radius: 50px; }
+    .radio-group label:last-child { border-top-right-radius: 50px; border-bottom-right-radius: 50px; }
+    .radio-group input[id="typeIn"]:checked + label { background-color: var(--success); color: white; }
+    .radio-group input[id="typeOut"]:checked + label { background-color: var(--danger); color: white; }
+    
+    input[type="text"] { padding: 14px 20px; margin: 10px 0; width: 100%; box-sizing: border-box; font-size: 15px; border-radius: 50px; border: 2px solid #eee; transition: var(--transition); background-color: #fafafa; }
+    input[type="text"]:focus { border-color: var(--primary); outline: none; background-color: #fff; }
+
+    .btn-action { background-color: var(--secondary); color: white; border: none; cursor: pointer; font-weight: 700; padding: 16px; width: 100%; border-radius: 50px; font-size: 16px; margin-top: 15px; transition: var(--transition); display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .btn-action:hover { box-shadow: 0 5px 15px rgba(22, 160, 133, 0.3); transform: translateY(-2px); }
+    .btn-action:disabled { background-color: #bdc3c7; cursor: not-allowed; transform: none; box-shadow: none; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+  <div id="loadingOverlay">
+    <div class="spinner"></div>
+    <div style="font-weight:600; color:var(--primary);">กำลังโหลดโมเดล AI...</div>
+    <div style="font-size:12px; color:var(--text-light); margin-top:5px;">(อาจใช้เวลา 5-10 วินาทีในครั้งแรก)</div>
+  </div>
+
+  <div class="container">
+    <h2 id="pageTitle">Modern Scan</h2>
+    <p id="gpsStatus"><i id="gpsIcon" class="fa-solid fa-location-dot"></i> กำลังค้นหาตำแหน่ง GPS...</p>
+
+    <div id="navMenu" class="nav-tabs hidden">
+      <button id="navScan" class="nav-btn scan-page active" onclick="showPage('scanPage')">
+        <i class="fa-solid fa-clock"></i> ลงเวลาปฏิบัติงาน
+      </button>
+      <button id="navReg" class="nav-btn register-page" onclick="showPage('registerPage')">
+        <i class="fa-solid fa-user-plus"></i> ลงทะเบียนใหม่
+      </button>
+    </div>
+
+    <div id="scanPage" class="hidden">
+      <h3><i class="fa-solid fa-expand"></i> สแกนใบหน้าของคุณ</h3>
+      <div class="radio-group nav-tabs" style="background-color:#eee;">
+        <input type="radio" id="typeIn" name="scanType" value="in" checked>
+        <label for="typeIn"><i class="fa-solid fa-sign-in-alt"></i> เข้างาน</label>
+        <input type="radio" id="typeOut" name="scanType" value="out">
+        <label for="typeOut"><i class="fa-solid fa-sign-out-alt"></i> ออกงาน</label>
+      </div>
+      <div class="video-wrapper" id="scanVideoWrapper">
+        <video id="scanVideo" autoplay muted playsinline></video>
+      </div>
+    </div>
+
+    <div id="registerPage" class="hidden">
+      <h3><i class="fa-solid fa-id-card"></i> ลงทะเบียนบุคคลภายนอก</h3>
+      <input type="text" id="regName" placeholder="ชื่อ-นามสกุล">
+      <input type="text" id="regPos" placeholder="ตำแหน่ง">
+      <div class="video-wrapper">
+        <video id="regVideo" autoplay muted playsinline></video>
+      </div>
+      <button id="btnRegister" class="btn-action" onclick="registerFace()">
+        <i class="fa-solid fa-camera"></i> บันทึกใบหน้าและข้อมูล
+      </button>
+    </div>
+  </div>
+
+  <div id="statusBar" class="info hidden">
+    <i id="statusIcon" class="fa-solid fa-circle-info"></i>
+    <span id="statusText">กำลังเชื่อมต่อฐานข้อมูล...</span>
+  </div>
+
+  <script>
+    // ✅ ลิงก์ GAS ของคุณ
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxlbrOH_09Gs_hXkHWa_OYHjKQHjqTis8-8NebNRnAV_bFfvPNJ5WS4tuThDMBvMBTS/exec';
+    
+    // ✅ ลิงก์โหลด AI ตัวใหม่ที่เสถียรกว่า (แก้ค้าง)
+    const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+
+    let labeledFaceDescriptors = [];
+    let currentLat = '', currentLng = '', isScanning = false, stream = null;
+
+    const ICONS = {
+      info: 'fa-solid fa-circle-info',
+      success: 'fa-solid fa-check-circle',
+      error: 'fa-solid fa-times-circle',
+      loading: 'fa-solid fa-spinner fa-spin'
+    };
+
+    window.onload = function() {
+      Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ]).then(startApp).catch(err => {
+        document.getElementById('loadingOverlay').innerHTML = `<i class="fa-solid fa-times-circle" style="font-size:40px; color:var(--danger); margin-bottom:20px;"></i><div style="color:var(--danger); font-weight:600;">Error โหลดโมเดล AI</div><div style="font-size:12px; color:var(--text-light); margin-top:5px;">โปรดรีเฟรชหน้าเว็บใหม่</div>`;
+        setStatus("error", "Error โหลดโมเดล AI: " + err);
+      });
+    };
+
+    function startApp() {
+      document.getElementById('loadingOverlay').classList.add('hidden');
+      setStatus("loading", "กำลังเชื่อมต่อฐานข้อมูล...");
+      
+      fetch(GAS_URL + "?action=getFaces")
+        .then(response => {
+          if (!response.ok) { throw new Error('Network response was not ok'); }
+          return response.json();
+        })
+        .then(data => {
+          if (!data || data.length === 0) {
+            setStatus("info", "เชื่อมต่อสำเร็จ แต่ยังไม่มีข้อมูลพนักงาน โปรดลงทะเบียน");
+            document.getElementById('navMenu').classList.remove('hidden');
+            showPage('registerPage');
+            return;
+          }
+          labeledFaceDescriptors = data.map(user => {
+            const float32Arr = new Float32Array(JSON.parse(user.descriptor));
+            return new faceapi.LabeledFaceDescriptors(user.name, [float32Arr]);
+          });
+          setStatus("success", "ระบบพร้อมใช้งาน!");
+          document.getElementById('navMenu').classList.remove('hidden');
+          showPage('scanPage'); 
+          getLocation(); 
+        }).catch(err => {
+          setStatus("error", "เชื่อมต่อฐานข้อมูลล้มเหลว (เช็คสิทธิ์ Anyone)");
+          console.error(err);
+        });
+    }
+
+    function showPage(pageId) {
+      isScanning = false;
+      document.getElementById('scanPage').classList.add('hidden');
+      document.getElementById('registerPage').classList.add('hidden');
+      document.getElementById(pageId).classList.remove('hidden');
+      
+      document.getElementById('navScan').classList.remove('active');
+      document.getElementById('navReg').classList.remove('active');
+      
+      if (pageId === 'scanPage') {
+        document.getElementById('pageTitle').innerText = "หน้าลงเวลาปฏิบัติงาน";
+        document.getElementById('navScan').classList.add('active');
+        startCamera('scanVideo');
+        isScanning = true; recognizeFaces(); 
+      } else {
+        document.getElementById('pageTitle').innerText = "หน้าลงทะเบียนใหม่";
+        document.getElementById('navReg').classList.add('active');
+        startCamera('regVideo');
+      }
+    }
+
+    function startCamera(videoId) {
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+        .then(s => { stream = s; document.getElementById(videoId).srcObject = stream; })
+        .catch(err => setStatus("error", "ไม่สามารถเข้าถึงกล้องได้ โปรดอนุญาตการใช้กล้อง"));
+    }
+
+    function getLocation() {
+      const gpsGpsStatus = document.getElementById('gpsStatus');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { 
+          currentLat = pos.coords.latitude; currentLng = pos.coords.longitude; 
+          gpsGpsStatus.innerHTML = '<i class="fa-solid fa-location-dot" style="color:var(--primary)"></i> ดึงพิกัด GPS สำเร็จ';
+          gpsGpsStatus.classList.add('active');
+        },
+        (err) => { 
+          gpsGpsStatus.innerHTML = '<i class="fa-solid fa-exclamation-triangle" style="color:var(--warning)"></i> โปรดเปิด GPS (Location)'; 
+          gpsGpsStatus.classList.remove('active');
+        }
+      );
+    }
+
+    async function registerFace() {
+      const name = document.getElementById('regName').value.trim();
+      const position = document.getElementById('regPos').value.trim();
+      if (!name || !position) { alert("กรุณาใส่ชื่อและตำแหน่งให้ครบ"); return; }
+
+      setStatus("loading", "กำลังวิเคราะห์ใบหน้า...");
+      document.getElementById('btnRegister').disabled = true;
+      const videoEl = document.getElementById('regVideo');
+      const detection = await faceapi.detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+
+      if (!detection) { 
+        setStatus("error", "ไม่พบใบหน้า กรุณาให้หน้าชัดเจนแล้วกดบันทึกใหม่"); 
+        document.getElementById('btnRegister').disabled = false; return; 
+      }
+
+      setStatus("loading", "กำลังส่งข้อมูลลงทะเบียน...");
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = videoEl.videoWidth; tempCanvas.height = videoEl.videoHeight;
+      tempCanvas.getContext('2d').drawImage(videoEl, 0, 0);
+      
+      const payload = {
+        action: 'register', name: name, position: position,
+        descriptorStr: JSON.stringify(Array.from(detection.descriptor)),
+        imageBase64: tempCanvas.toDataURL('image/png')
+      };
+
+      fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+        .then(res => res.json())
+        .then(data => {
+          setStatus("success", data.message); 
+          alert(data.message);
+          document.getElementById('regName').value = ''; document.getElementById('regPos').value = '';
+          document.getElementById('btnRegister').disabled = false; startApp(); 
+        }).catch(err => { setStatus("error", "เกิดข้อผิดพลาดในการส่งข้อมูล"); document.getElementById('btnRegister').disabled = false; });
+    }
+
+    function checkTimeCondition(type) {
+      const h = new Date().getHours(), m = new Date().getMinutes();
+      if (type === 'in') {
+        if (h < 8) return { status: 'ปกติ', reason: '-' };
+        if (h === 8 && m <= 15) return { status: 'สาย', reason: '-' };
+        return { status: 'ขาดงาน', reason: '-' }; 
+      } else {
+        if (h >= 16) return { status: 'ปกติ', reason: '-' };
+        const reason = prompt("แจ้งเตือน: คุณกำลังออกงานก่อน 16:00 น.\nกรุณาระบุเหตุผล:");
+        return (!reason || reason.trim() === "") ? null : { status: 'ออกก่อนเวลา', reason: reason };
+      }
+    }
+
+    async function recognizeFaces() {
+      const videoEl = document.getElementById('scanVideo');
+      const wrapperEl = document.getElementById('scanVideoWrapper');
+      if (!isScanning) return;
+      if (labeledFaceDescriptors.length === 0) return;
+
+      const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6);
+      const scanInterval = setInterval(async () => {
+        if (!isScanning) { clearInterval(scanInterval); return; }
+        wrapperEl.classList.add('scanning'); 
+        
+        const detection = await faceapi.detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+        if (detection) {
+          const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+          if (bestMatch.label !== 'unknown') {
+            clearInterval(scanInterval); isScanning = false;
+            
+            wrapperEl.classList.remove('scanning');
+            wrapperEl.classList.add('success'); 
+
+            const scanType = document.querySelector('input[name="scanType"]:checked').value;
+            const typeStr = scanType === 'in' ? 'เข้า' : 'ออก';
+            const timeCheck = checkTimeCondition(scanType);
+            
+            if (!timeCheck) {
+               setStatus("error", "❌ ยกเลิก: ไม่ได้ระบุเหตุผลการออกก่อนเวลา");
+               wrapperEl.classList.remove('success');
+               setTimeout(() => { isScanning = true; recognizeFaces(); }, 3000); return;
+            }
+
+            setStatus("loading", `พบผู้ใช้งาน: ${bestMatch.label}\nกำลังบันทึกเวลา...`);
+            if (!currentLat) getLocation(); 
+
+            const payload = { action: 'attendance', name: bestMatch.label, lat: currentLat, lng: currentLng, typeStr: typeStr, statusStr: timeCheck.status, reasonStr: timeCheck.reason };
+
+            fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+              .then(res => {
+                  if (!res.ok) { throw new Error('Network response was not ok'); }
+                  return res.json();
+              })
+              .then(data => {
+                setStatus("success", data.message);
+                alert(data.message);
+                wrapperEl.classList.remove('success');
+                setTimeout(() => { isScanning = true; recognizeFaces(); }, 3000);
+              }).catch(err => {
+                  setStatus("error", "บันทึกเวลาล้มเหลว (เช็คสิทธิ์ Anyone)");
+                  wrapperEl.classList.remove('scanning', 'success');
+                  setTimeout(() => { isScanning = true; recognizeFaces(); }, 3000);
+              });
+          } else {
+             wrapperEl.classList.remove('scanning');
+             wrapperEl.classList.add('error'); 
+             setTimeout(()=> wrapperEl.classList.remove('error'), 500);
+          }
+        } else {
+           wrapperEl.classList.remove('scanning'); 
+        }
+      }, 1000); 
+    }
+
+    function setStatus(type, msg) {
+      const bar = document.getElementById('statusBar');
+      const icon = document.getElementById('statusIcon');
+      const text = document.getElementById('statusText');
+      
+      bar.classList.remove('hidden', 'info', 'success', 'error');
+      bar.classList.add(type === 'loading' ? 'info' : type);
+      
+      icon.className = ICONS[type]; 
+      text.innerText = msg;
+    }
+  </script>
+</body>
+</html>
