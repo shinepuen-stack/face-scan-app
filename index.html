@@ -55,7 +55,6 @@
     .btn-action { background: var(--secondary); color: white; border: none; padding: 16px; width: 100%; border-radius: 50px; font-weight: 700; cursor: pointer; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; }
     .btn-action:disabled { background-color: #bdc3c7; cursor: not-allowed; }
     
-    /* 🚨 แก้บั๊กหน้าจอโหลดค้างตรงนี้ (ใส่ !important บังคับซ่อน) 🚨 */
     .hidden { display: none !important; }
   </style>
 </head>
@@ -128,10 +127,10 @@
     };
 
     async function startApp() {
-      // ซ่อน Overlay (ตอนนี้ซ่อนได้แน่นอนแล้วเพราะมี !important)
-      document.getElementById('loadingOverlay').classList.add('hidden');
-      setStatus("loading", "กำลังดึงข้อมูลพนักงานจากระบบ...");
+      // 🚨 บังคับซ่อนหน้าจอโหลดทิ้งด้วย JavaScript 🚨
+      document.getElementById('loadingOverlay').style.display = 'none';
       
+      setStatus("loading", "กำลังดึงข้อมูลพนักงานจากระบบ...");
       try {
         const res = await fetch(GAS_URL + "?action=getFaces");
         const data = await res.json();
