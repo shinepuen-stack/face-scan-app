@@ -35,7 +35,7 @@
     .video-wrapper.success { border-color: var(--success); }
     .video-wrapper.error { border-color: var(--danger); }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0px rgba(39,174,96,0.4); } 70% { box-shadow: 0 0 0 10px rgba(39,174,96,0); } 100% { box-shadow: 0 0 0 0px rgba(39,174,96,0); } }
-    video { width: 100%; height: 100%; object-fit: cover; }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
     
     #statusBar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); min-width: 320px; padding: 15px 20px; border-radius: 50px; background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 900; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 600; }
     #statusBar.info { color: var(--primary); border: 1px solid var(--primary-light); }
