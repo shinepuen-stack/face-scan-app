@@ -43,12 +43,9 @@
     #statusBar.success { color: var(--success); background: #eafaf1; border: 1px solid #d4efdf; }
     #statusBar.error { color: var(--danger); background: #fdf2f2; border: 1px solid #fadbd8; }
     
-    .radio-group input { display: none; }
-    .radio-group label { flex: 1; padding: 12px; background: #eee; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: var(--transition); color: var(--text-light); }
-    .radio-group label:first-of-type { border-radius: 50px 0 0 50px; }
-    .radio-group label:last-of-type { border-radius: 0 50px 50px 0; }
-    .radio-group input:checked + label.in { background: var(--success); color: white; }
-    .radio-group input:checked + label.out { background: var(--danger); color: white; }
+    .clock-display { background: #f4f6f9; padding: 15px; border-radius: var(--radius); margin-bottom: 15px; border: 2px solid #eee; }
+    .clock-time { font-size: 32px; font-weight: bold; color: var(--text-dark); font-family: monospace; }
+    .clock-mode { font-size: 16px; font-weight: 600; margin-top: 5px; }
     
     input[type="text"] { padding: 14px 20px; margin: 10px 0; width: 100%; border-radius: 50px; border: 2px solid #eee; box-sizing: border-box; font-size: 15px; }
     input[type="text"]:focus { border-color: var(--primary); outline: none; }
@@ -75,11 +72,9 @@
     </div>
 
     <div id="scanPage" class="hidden">
-      <div class="radio-group nav-tabs">
-        <input type="radio" id="typeIn" name="scanType" value="in" checked>
-        <label for="typeIn" class="in"><i class="fa-solid fa-sign-in-alt"></i> เข้างาน</label>
-        <input type="radio" id="typeOut" name="scanType" value="out">
-        <label for="typeOut" class="out"><i class="fa-solid fa-sign-out-alt"></i> ออกงาน</label>
+      <div class="clock-display">
+        <div id="realTime" class="clock-time">00:00:00</div>
+        <div id="currentMode" class="clock-mode">กำลังคำนวณโหมด...</div>
       </div>
       <div class="video-wrapper" id="scanVideoWrapper"><video id="scanVideo" autoplay muted playsinline></video></div>
     </div>
@@ -102,6 +97,25 @@
     const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
 
     let labeledFaceDescriptors = [], isScanning = false, stream = null, currentLat = '', currentLng = '';
+
+    // อัปเดตนาฬิกาและโหมดการสแกนทุกวินาที
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('realTime').innerText = now.toLocaleTimeString('th-TH');
+      
+      const h = now.getHours();
+      const modeEl = document.getElementById('currentMode');
+      
+      if (h < 16) {
+        if (h < 8) {
+          modeEl.innerHTML = '<span style="color:var(--success)"><i class="fa-solid fa-sun"></i> โหมด: เข้างาน (ปกติ)</span>';
+        } else {
+          modeEl.innerHTML = '<span style="color:var(--warning)"><i class="fa-solid fa-clock"></i> โหมด: เข้างาน (สาย)</span>';
+        }
+      } else {
+        modeEl.innerHTML = '<span style="color:var(--secondary)"><i class="fa-solid fa-moon"></i> โหมด: ออกงาน</span>';
+      }
+    }, 1000);
 
     window.onload = async () => {
       const loadText = document.getElementById('loadingText');
@@ -212,20 +226,13 @@
       }
     }
 
-    async function checkTimeCondition(type) {
-      const h = new Date().getHours(), m = new Date().getMinutes();
-      if (type === 'in') {
-        if (h < 8) return { status: 'ปกติ', reason: '-' };
-        if (h === 8 && m <= 15) return { status: 'สาย', reason: '-' };
-        return { status: 'ขาดงาน', reason: '-' }; 
+    // ฟังก์ชันคำนวณโหมดสแกนอัตโนมัติตามเวลา
+    function getScanTypeAndStatus() {
+      const h = new Date().getHours();
+      if (h < 16) {
+        return { type: 'เข้า', status: h < 8 ? 'ปกติ' : 'สาย', reason: '-' };
       } else {
-        if (h >= 16) return { status: 'ปกติ', reason: '-' };
-        const { value: reason } = await Swal.fire({
-          title: 'ออกก่อนเวลา!', text: 'คุณกำลังลงเวลาออกงานก่อน 16:00 น. กรุณาระบุเหตุผล:',
-          input: 'text', inputPlaceholder: 'พิมพ์เหตุผลที่นี่...', showCancelButton: true,
-          confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#27ae60', cancelButtonColor: '#e74c3c'
-        });
-        return (!reason || reason.trim() === "") ? null : { status: 'ออกก่อนเวลา', reason: reason };
+        return { type: 'ออก', status: 'ปกติ', reason: '-' };
       }
     }
 
@@ -234,7 +241,6 @@
       const wrapper = document.getElementById('scanVideoWrapper');
       if (!isScanning || labeledFaceDescriptors.length === 0) return;
       
-      // ลดความเดาสุ่มลง (0.45 ต้องหน้าเหมือนตัวจริงถึงจะให้ผ่าน)
       const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.45);
       
       const interval = setInterval(async () => {
@@ -250,50 +256,48 @@
             wrapper.classList.remove('scanning');
             wrapper.classList.add('success');
             
-            const type = document.querySelector('input[name="scanType"]:checked').value;
-            const timeCheck = await checkTimeCondition(type);
-            
-            if (!timeCheck) {
-               setStatus("error", "❌ ยกเลิก: ไม่ได้ระบุเหตุผล");
-               wrapper.classList.remove('success');
-               setTimeout(() => { isScanning = true; recognizeFaces(); }, 3000); return;
-            }
+            // ดึงประเภทการสแกนอัตโนมัติ (ไม่ต้องเลือกเองแล้ว)
+            const timeInfo = getScanTypeAndStatus();
 
             setStatus("loading", `กำลังบันทึกเวลาให้: ${match.label}...`);
             
             try {
               const res = await fetch(GAS_URL, { 
                 method: 'POST', 
-                body: JSON.stringify({ action: 'attendance', name: match.label, typeStr: type === 'in' ? 'เข้า' : 'ออก', statusStr: timeCheck.status, reasonStr: timeCheck.reason, lat: currentLat, lng: currentLng }) 
+                body: JSON.stringify({ 
+                  action: 'attendance', 
+                  name: match.label, 
+                  typeStr: timeInfo.type, 
+                  statusStr: timeInfo.status, 
+                  reasonStr: timeInfo.reason, 
+                  lat: currentLat, 
+                  lng: currentLng 
+                }) 
               });
               const result = await res.json();
               
-              // วันที่และเวลาปัจจุบันสำหรับโชว์หน้าเว็บ
               const now = new Date();
               const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
               const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
               if (result.status === 'duplicate') {
-                // แจ้งเตือนเมื่อสแกนซ้ำไปแล้ว
                 await Swal.fire({
                   icon: 'warning',
                   title: 'สแกนซ้ำ!',
                   html: `<b style="font-size:22px; color:var(--primary);">${match.label}</b><br><br>${result.message}`,
-                  confirmButtonText: 'ตกลง',
-                  confirmButtonColor: '#f39c12'
+                  confirmButtonText: 'ตกลง', confirmButtonColor: '#f39c12'
                 });
               } else {
-                // แจ้งเตือนเมื่อบันทึกสำเร็จ โชว์ชื่อ วันที่ เวลา
                 await Swal.fire({
                   icon: 'success',
-                  title: type === 'in' ? 'เข้างานสำเร็จ!' : 'ออกงานสำเร็จ!',
+                  title: timeInfo.type === 'เข้า' ? 'เข้างานสำเร็จ!' : 'ออกงานสำเร็จ!',
                   html: `<div style="text-align:left; display:inline-block; margin-top:10px; background:#f4f6f9; padding:15px; border-radius:10px;">
                            <b>👤 ชื่อ:</b> <span style="color:var(--primary); font-size:18px;">${match.label}</span><br>
                            <b>📅 วันที่:</b> ${dateStr}<br>
-                           <b>⏰ เวลา:</b> ${timeStr} น.
+                           <b>⏰ เวลา:</b> ${timeStr} น.<br>
+                           <b>📌 สถานะ:</b> <span style="color:${timeInfo.status === 'สาย' ? 'red' : 'green'}; font-weight:bold;">${timeInfo.status}</span>
                          </div>`,
-                  timer: 3500,
-                  showConfirmButton: false
+                  timer: 3500, showConfirmButton: false
                 });
               }
 
