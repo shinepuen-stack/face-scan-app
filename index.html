@@ -267,7 +267,7 @@
       const wrapper = document.getElementById('scanVideoWrapper');
       if (!isScanning || labeledFaceDescriptors.length === 0) return;
       
-      const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6);
+      const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.45);
       
       const interval = setInterval(async () => {
         if (!isScanning) return clearInterval(interval);
