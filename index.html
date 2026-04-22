@@ -101,7 +101,8 @@
     // 📍 ตั้งค่าพิกัดศูนย์บริการสาธารณสุข 30 บางกอกน้อย
     const TARGET_LAT = 13.755801314957528;
     const TARGET_LNG = 100.48122450649643;
-    const ALLOWED_RADIUS = 45; // รัศมี 45 เมตร (ครอบคลุมพื้นที่ ~4260 ตร.ม. + เผื่อ GPS แกว่ง)
+    // 👇 แก้ไขเป็น 100 เมตรตรงนี้ครับ 👇
+    const ALLOWED_RADIUS = 100; 
 
     let labeledFaceDescriptors = [], isScanning = false, stream = null;
     let currentLat = '', currentLng = '', distanceToCenter = 99999, isWithinArea = false;
@@ -196,7 +197,7 @@
 
     // ฟังก์ชันคำนวณระยะทางจากละติจูด/ลองจิจูด (เป็นเมตร)
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-      const R = 6371e3; // รัศมีโลก
+      const R = 6371e3; 
       const p1 = lat1 * Math.PI/180;
       const p2 = lat2 * Math.PI/180;
       const dp = (lat2-lat1) * Math.PI/180;
@@ -228,7 +229,7 @@
             }
           },
           e => { document.getElementById('gpsStatus').innerHTML = '<i class="fa-solid fa-exclamation-triangle" style="color:var(--warning)"></i> โปรดอนุญาตการใช้งาน GPS'; },
-          { enableHighAccuracy: true, maximumAge: 0 } // สั่งให้ดึงพิกัดแบบแม่นยำสูงสุด
+          { enableHighAccuracy: true, maximumAge: 0 } 
         );
       }
     }
