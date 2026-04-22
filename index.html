@@ -171,7 +171,10 @@
       document.getElementById('navReg').classList.toggle('active', pageId === 'registerPage');
       
       startCamera(pageId === 'scanPage' ? 'scanVideo' : 'regVideo');
-      if (pageId === 'scanPage') { isScanning = true; recognizeFaces(); }
+      if (pageId === 'scanPage') { 
+        isScanning = true; 
+        recognizeFaces(); 
+      }
     }
 
     async function startCamera(id) {
@@ -226,7 +229,6 @@
       }
     }
 
-    // ฟังก์ชันคำนวณโหมดสแกนอัตโนมัติตามเวลา
     function getScanTypeAndStatus() {
       const h = new Date().getHours();
       if (h < 16) {
@@ -236,6 +238,7 @@
       }
     }
 
+    // 🚨 ระบบสแกนแบบใหม่: ป้องกันการส่งข้อมูลซ้อนทับกัน (Double Scan) 🚨
     async function recognizeFaces() {
       const video = document.getElementById('scanVideo');
       const wrapper = document.getElementById('scanVideoWrapper');
@@ -243,25 +246,27 @@
       
       const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.45);
       
-      const interval = setInterval(async () => {
-        if (!isScanning) return clearInterval(interval);
+      // ใช้ Recursive function แทน setInterval แบบเดิม
+      async function scanLoop() {
+        if (!isScanning) return; // ถ้าสั่งหยุดสแกน ให้จบการทำงานรอบนี้ทันที
+
         wrapper.classList.add('scanning');
         
-        const det = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-        
-        if (det) {
-          const match = faceMatcher.findBestMatch(det.descriptor);
-          if (match.label !== 'unknown') {
-            isScanning = false; clearInterval(interval);
-            wrapper.classList.remove('scanning');
-            wrapper.classList.add('success');
+        try {
+          const det = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+          
+          if (det) {
+            const match = faceMatcher.findBestMatch(det.descriptor);
             
-            // ดึงประเภทการสแกนอัตโนมัติ (ไม่ต้องเลือกเองแล้ว)
-            const timeInfo = getScanTypeAndStatus();
-
-            setStatus("loading", `กำลังบันทึกเวลาให้: ${match.label}...`);
-            
-            try {
+            // ถ้าเจอหน้าคนที่ลงทะเบียนไว้
+            if (match.label !== 'unknown') {
+              isScanning = false; // สั่ง "หยุดสแกนทันที" ป้องกันภาพที่ 2 ส่งซ้อนกัน
+              wrapper.classList.remove('scanning');
+              wrapper.classList.add('success');
+              
+              const timeInfo = getScanTypeAndStatus();
+              setStatus("loading", `กำลังบันทึกเวลาให้: ${match.label}...`);
+              
               const res = await fetch(GAS_URL, { 
                 method: 'POST', 
                 body: JSON.stringify({ 
@@ -282,15 +287,13 @@
 
               if (result.status === 'duplicate') {
                 await Swal.fire({
-                  icon: 'warning',
-                  title: 'สแกนซ้ำ!',
+                  icon: 'warning', title: 'สแกนซ้ำ!',
                   html: `<b style="font-size:22px; color:var(--primary);">${match.label}</b><br><br>${result.message}`,
                   confirmButtonText: 'ตกลง', confirmButtonColor: '#f39c12'
                 });
               } else {
                 await Swal.fire({
-                  icon: 'success',
-                  title: timeInfo.type === 'เข้า' ? 'เข้างานสำเร็จ!' : 'ออกงานสำเร็จ!',
+                  icon: 'success', title: timeInfo.type === 'เข้า' ? 'เข้างานสำเร็จ!' : 'ออกงานสำเร็จ!',
                   html: `<div style="text-align:left; display:inline-block; margin-top:10px; background:#f4f6f9; padding:15px; border-radius:10px;">
                            <b>👤 ชื่อ:</b> <span style="color:var(--primary); font-size:18px;">${match.label}</span><br>
                            <b>📅 วันที่:</b> ${dateStr}<br>
@@ -301,23 +304,39 @@
                 });
               }
 
+              // 🚨 ช่วง Cooldown: พักกล้อง 3 วินาที ให้คนเดินออกไปก่อนเริ่มสแกนคนต่อไป
               wrapper.classList.remove('success');
-              isScanning = true; recognizeFaces();
-            } catch (e) {
-              Swal.fire({ icon: 'error', title: 'บันทึกเวลาล้มเหลว', text: 'โปรดลองสแกนใหม่อีกครั้ง', confirmButtonColor: '#e74c3c' });
-              setStatus("error", "บันทึกเวลาล้มเหลว");
-              wrapper.classList.remove('success');
-              setTimeout(() => { isScanning = true; recognizeFaces(); }, 3000);
+              setStatus("info", "พักกล้อง 3 วินาที... โปรดหลบหน้าจากกล้อง");
+              
+              setTimeout(() => {
+                setStatus("success", "ระบบพร้อมใช้งาน!");
+                isScanning = true;
+                scanLoop(); // สั่งให้เริ่มสแกนใหม่ได้!
+              }, 3000);
+              
+              return; // สั่งจบฟังก์ชันของรอบนี้เลย ไม่ต้องทำบรรทัดล่างต่อ
+            } else {
+              // หน้าคนแปลกหน้า
+              wrapper.classList.remove('scanning');
+              wrapper.classList.add('error');
+              setTimeout(() => wrapper.classList.remove('error'), 500);
             }
           } else {
+            // ไม่เจอหน้าใคร
             wrapper.classList.remove('scanning');
-            wrapper.classList.add('error');
-            setTimeout(() => wrapper.classList.remove('error'), 500);
           }
-        } else {
-          wrapper.classList.remove('scanning');
+        } catch (e) {
+          console.error(e);
         }
-      }, 1000);
+
+        // ถ้ายังไม่ได้สั่งหยุดสแกน ให้รอ 1 วินาทีแล้วเริ่มถ่ายภาพวิเคราะห์ใหม่ (ป้องกันภาพซ้อนทับ)
+        if (isScanning) {
+          setTimeout(scanLoop, 1000);
+        }
+      }
+
+      // เริ่มการทำงานของลูป
+      scanLoop();
     }
 
     function setStatus(type, msg) {
