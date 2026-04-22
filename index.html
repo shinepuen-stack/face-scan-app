@@ -64,7 +64,9 @@
 
   <div class="container">
     <h2>Modern Scan</h2>
-    <p id="gpsStatus" style="font-size:13px; color:var(--text-light); margin-bottom:20px;"><i class="fa-solid fa-location-dot"></i> กำลังค้นหาตำแหน่ง GPS...</p>
+    <div id="gpsStatus" style="font-size:14px; font-weight:bold; color:var(--text-light); margin-bottom:20px; padding: 10px; background: #eee; border-radius: 50px;">
+      <i class="fa-solid fa-location-dot"></i> กำลังค้นหาตำแหน่ง GPS...
+    </div>
 
     <div id="navMenu" class="nav-tabs hidden">
       <button id="navScan" class="nav-btn scan-page active" onclick="showPage('scanPage')"><i class="fa-solid fa-clock"></i> ลงเวลา</button>
@@ -96,9 +98,14 @@
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbxlbrOH_09Gs_hXkHWa_OYHjKQHjqTis8-8NebNRnAV_bFfvPNJ5WS4tuThDMBvMBTS/exec';
     const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
 
-    let labeledFaceDescriptors = [], isScanning = false, stream = null, currentLat = '', currentLng = '';
+    // 📍 ตั้งค่าพิกัดศูนย์บริการสาธารณสุข 30 บางกอกน้อย
+    const TARGET_LAT = 13.755801314957528;
+    const TARGET_LNG = 100.48122450649643;
+    const ALLOWED_RADIUS = 45; // รัศมี 45 เมตร (ครอบคลุมพื้นที่ ~4260 ตร.ม. + เผื่อ GPS แกว่ง)
 
-    // อัปเดตนาฬิกาและโหมดการสแกนทุกวินาที
+    let labeledFaceDescriptors = [], isScanning = false, stream = null;
+    let currentLat = '', currentLng = '', distanceToCenter = 99999, isWithinArea = false;
+
     setInterval(() => {
       const now = new Date();
       document.getElementById('realTime').innerText = now.toLocaleTimeString('th-TH');
@@ -187,14 +194,52 @@
       }
     }
 
+    // ฟังก์ชันคำนวณระยะทางจากละติจูด/ลองจิจูด (เป็นเมตร)
+    function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371e3; // รัศมีโลก
+      const p1 = lat1 * Math.PI/180;
+      const p2 = lat2 * Math.PI/180;
+      const dp = (lat2-lat1) * Math.PI/180;
+      const dl = (lon2-lon1) * Math.PI/180;
+      const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    // 📍 ระบบดึงพิกัดแบบเกาะติด (Real-time Tracking)
     function getLocation() {
-      navigator.geolocation.getCurrentPosition(
-        p => { currentLat = p.coords.latitude; currentLng = p.coords.longitude; document.getElementById('gpsStatus').innerHTML = '<i class="fa-solid fa-location-dot" style="color:var(--primary)"></i> ดึงพิกัด GPS สำเร็จ'; },
-        e => { document.getElementById('gpsStatus').innerHTML = '<i class="fa-solid fa-exclamation-triangle" style="color:var(--warning)"></i> โปรดเปิด GPS (Location)'; }
-      );
+      if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(
+          p => { 
+            currentLat = p.coords.latitude; 
+            currentLng = p.coords.longitude; 
+            distanceToCenter = getDistanceInMeters(currentLat, currentLng, TARGET_LAT, TARGET_LNG);
+            isWithinArea = distanceToCenter <= ALLOWED_RADIUS;
+            
+            const gpsEl = document.getElementById('gpsStatus');
+            if (isWithinArea) {
+              gpsEl.innerHTML = `<i class="fa-solid fa-location-dot" style="color:var(--success)"></i> อยู่ในพื้นที่ศูนย์ฯ (ห่าง ${Math.round(distanceToCenter)} ม.)`;
+              gpsEl.style.background = 'var(--primary-light)';
+              gpsEl.style.color = 'var(--success)';
+            } else {
+              gpsEl.innerHTML = `<i class="fa-solid fa-ban" style="color:var(--danger)"></i> อยู่นอกพื้นที่! (ห่าง ${Math.round(distanceToCenter)} ม.)`;
+              gpsEl.style.background = '#fdf2f2';
+              gpsEl.style.color = 'var(--danger)';
+            }
+          },
+          e => { document.getElementById('gpsStatus').innerHTML = '<i class="fa-solid fa-exclamation-triangle" style="color:var(--warning)"></i> โปรดอนุญาตการใช้งาน GPS'; },
+          { enableHighAccuracy: true, maximumAge: 0 } // สั่งให้ดึงพิกัดแบบแม่นยำสูงสุด
+        );
+      }
     }
 
     async function registerFace() {
+      // 🚨 บล็อกไม่ให้ลงทะเบียนถ้านอกพื้นที่
+      if (!isWithinArea) {
+        Swal.fire({ icon: 'error', title: 'อยู่นอกพื้นที่', text: `คุณห่างจากศูนย์ฯ ${Math.round(distanceToCenter)} เมตร\nต้องอยู่ในระยะ ${ALLOWED_RADIUS} เมตรเท่านั้น ถึงจะลงทะเบียนได้ครับ`, confirmButtonColor: '#e74c3c' });
+        return;
+      }
+
       const name = document.getElementById('regName').value.trim();
       const pos = document.getElementById('regPos').value.trim();
       if (!name || !pos) { Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบถ้วน', text: 'กรุณากรอกชื่อและตำแหน่งให้ครบครับ', confirmButtonColor: '#27ae60' }); return; }
@@ -231,14 +276,10 @@
 
     function getScanTypeAndStatus() {
       const h = new Date().getHours();
-      if (h < 16) {
-        return { type: 'เข้า', status: h < 8 ? 'ปกติ' : 'สาย', reason: '-' };
-      } else {
-        return { type: 'ออก', status: 'ปกติ', reason: '-' };
-      }
+      if (h < 16) { return { type: 'เข้า', status: h < 8 ? 'ปกติ' : 'สาย', reason: '-' }; } 
+      else { return { type: 'ออก', status: 'ปกติ', reason: '-' }; }
     }
 
-    // 🚨 ระบบสแกนแบบใหม่: ป้องกันการส่งข้อมูลซ้อนทับกัน (Double Scan) 🚨
     async function recognizeFaces() {
       const video = document.getElementById('scanVideo');
       const wrapper = document.getElementById('scanVideoWrapper');
@@ -246,21 +287,29 @@
       
       const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.45);
       
-      // ใช้ Recursive function แทน setInterval แบบเดิม
       async function scanLoop() {
-        if (!isScanning) return; // ถ้าสั่งหยุดสแกน ให้จบการทำงานรอบนี้ทันที
+        if (!isScanning) return; 
 
+        // 🚨 บล็อกกล้องไม่ให้วิเคราะห์หน้า ถ้านอกพื้นที่
+        if (!isWithinArea) {
+          wrapper.classList.remove('scanning');
+          wrapper.classList.add('error');
+          setStatus("error", `อยู่นอกพื้นที่ (ห่าง ${Math.round(distanceToCenter)} ม.) ระบบล็อก`);
+          setTimeout(scanLoop, 2000); // พักรอ 2 วินาทีแล้วเช็คใหม่
+          return;
+        }
+
+        wrapper.classList.remove('error');
         wrapper.classList.add('scanning');
+        setStatus("success", "ระบบพร้อมใช้งาน!");
         
         try {
           const det = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
           
           if (det) {
             const match = faceMatcher.findBestMatch(det.descriptor);
-            
-            // ถ้าเจอหน้าคนที่ลงทะเบียนไว้
             if (match.label !== 'unknown') {
-              isScanning = false; // สั่ง "หยุดสแกนทันที" ป้องกันภาพที่ 2 ส่งซ้อนกัน
+              isScanning = false;
               wrapper.classList.remove('scanning');
               wrapper.classList.add('success');
               
@@ -269,15 +318,7 @@
               
               const res = await fetch(GAS_URL, { 
                 method: 'POST', 
-                body: JSON.stringify({ 
-                  action: 'attendance', 
-                  name: match.label, 
-                  typeStr: timeInfo.type, 
-                  statusStr: timeInfo.status, 
-                  reasonStr: timeInfo.reason, 
-                  lat: currentLat, 
-                  lng: currentLng 
-                }) 
+                body: JSON.stringify({ action: 'attendance', name: match.label, typeStr: timeInfo.type, statusStr: timeInfo.status, reasonStr: timeInfo.reason, lat: currentLat, lng: currentLng }) 
               });
               const result = await res.json();
               
@@ -286,11 +327,7 @@
               const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
               if (result.status === 'duplicate') {
-                await Swal.fire({
-                  icon: 'warning', title: 'สแกนซ้ำ!',
-                  html: `<b style="font-size:22px; color:var(--primary);">${match.label}</b><br><br>${result.message}`,
-                  confirmButtonText: 'ตกลง', confirmButtonColor: '#f39c12'
-                });
+                await Swal.fire({ icon: 'warning', title: 'สแกนซ้ำ!', html: `<b style="font-size:22px; color:var(--primary);">${match.label}</b><br><br>${result.message}`, confirmButtonText: 'ตกลง', confirmButtonColor: '#f39c12' });
               } else {
                 await Swal.fire({
                   icon: 'success', title: timeInfo.type === 'เข้า' ? 'เข้างานสำเร็จ!' : 'ออกงานสำเร็จ!',
@@ -304,38 +341,22 @@
                 });
               }
 
-              // 🚨 ช่วง Cooldown: พักกล้อง 3 วินาที ให้คนเดินออกไปก่อนเริ่มสแกนคนต่อไป
               wrapper.classList.remove('success');
               setStatus("info", "พักกล้อง 3 วินาที... โปรดหลบหน้าจากกล้อง");
-              
-              setTimeout(() => {
-                setStatus("success", "ระบบพร้อมใช้งาน!");
-                isScanning = true;
-                scanLoop(); // สั่งให้เริ่มสแกนใหม่ได้!
-              }, 3000);
-              
-              return; // สั่งจบฟังก์ชันของรอบนี้เลย ไม่ต้องทำบรรทัดล่างต่อ
+              setTimeout(() => { isScanning = true; scanLoop(); }, 3000);
+              return; 
             } else {
-              // หน้าคนแปลกหน้า
               wrapper.classList.remove('scanning');
               wrapper.classList.add('error');
               setTimeout(() => wrapper.classList.remove('error'), 500);
             }
           } else {
-            // ไม่เจอหน้าใคร
             wrapper.classList.remove('scanning');
           }
-        } catch (e) {
-          console.error(e);
-        }
+        } catch (e) { console.error(e); }
 
-        // ถ้ายังไม่ได้สั่งหยุดสแกน ให้รอ 1 วินาทีแล้วเริ่มถ่ายภาพวิเคราะห์ใหม่ (ป้องกันภาพซ้อนทับ)
-        if (isScanning) {
-          setTimeout(scanLoop, 1000);
-        }
+        if (isScanning) setTimeout(scanLoop, 1000);
       }
-
-      // เริ่มการทำงานของลูป
       scanLoop();
     }
 
