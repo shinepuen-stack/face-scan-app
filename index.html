@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ระบบลงเวลาปฏิบัติงานด้วยใบหน้า (Modern Scan)</title>
+  <title>ระบบสแกนหน้าลงเวลาปฏิบัติงานบุคคลภายนอกช่วยปฏิบัติงาน ศูนย์บริการสาธารณสุข 30 บางกอกน้อย</title>
   
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -19,7 +19,10 @@
     }
     body { font-family: 'Segoe UI', Tahoma, sans-serif; text-align: center; padding: 20px; margin: 0; background-color: var(--bg-body); color: var(--text-dark); line-height: 1.6;}
     .container { max-width: 480px; margin: 20px auto 100px auto; background: var(--bg-card); padding: 30px; border-radius: var(--radius); box-shadow: var(--shadow-soft); }
-    h2 { color: var(--primary); font-weight: 700; margin-top: 0; }
+    
+    h2 { color: var(--primary); font-weight: 700; margin-top: 0; font-size: 22px; line-height: 1.4; margin-bottom: 20px;}
+    .sub-title { font-size: 18px; color: var(--secondary); display: block; margin-top: 5px; }
+    .location-title { font-size: 15px; color: var(--text-light); font-weight: normal; display: block; margin-top: 2px; }
     
     #loadingOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
     .spinner { border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
@@ -63,7 +66,12 @@
   </div>
 
   <div class="container">
-    <h2>Modern Scan</h2>
+    <h2>
+      ระบบสแกนหน้าลงเวลา
+      <span class="sub-title">บุคคลภายนอกช่วยปฏิบัติงาน</span>
+      <span class="location-title">ศูนย์บริการสาธารณสุข 30 บางกอกน้อย</span>
+    </h2>
+
     <div id="gpsStatus" style="font-size:14px; font-weight:bold; color:var(--text-light); margin-bottom:20px; padding: 10px; background: #eee; border-radius: 50px;">
       <i class="fa-solid fa-location-dot"></i> กำลังค้นหาตำแหน่ง GPS...
     </div>
@@ -98,10 +106,8 @@
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbxlbrOH_09Gs_hXkHWa_OYHjKQHjqTis8-8NebNRnAV_bFfvPNJ5WS4tuThDMBvMBTS/exec';
     const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
 
-    // 📍 ตั้งค่าพิกัดศูนย์บริการสาธารณสุข 30 บางกอกน้อย
     const TARGET_LAT = 13.755801314957528;
     const TARGET_LNG = 100.48122450649643;
-    // 👇 แก้ไขเป็น 100 เมตรตรงนี้ครับ 👇
     const ALLOWED_RADIUS = 100; 
 
     let labeledFaceDescriptors = [], isScanning = false, stream = null;
@@ -195,7 +201,6 @@
       }
     }
 
-    // ฟังก์ชันคำนวณระยะทางจากละติจูด/ลองจิจูด (เป็นเมตร)
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
       const R = 6371e3; 
       const p1 = lat1 * Math.PI/180;
@@ -207,7 +212,6 @@
       return R * c;
     }
 
-    // 📍 ระบบดึงพิกัดแบบเกาะติด (Real-time Tracking)
     function getLocation() {
       if (navigator.geolocation) {
         navigator.geolocation.watchPosition(
@@ -235,9 +239,8 @@
     }
 
     async function registerFace() {
-      // 🚨 บล็อกไม่ให้ลงทะเบียนถ้านอกพื้นที่
       if (!isWithinArea) {
-        Swal.fire({ icon: 'error', title: 'อยู่นอกพื้นที่', text: `คุณห่างจากศูนย์ฯ ${Math.round(distanceToCenter)} เมตร\nต้องอยู่ในระยะ ${ALLOWED_RADIUS} เมตรเท่านั้น ถึงจะลงทะเบียนได้ครับ`, confirmButtonColor: '#e74c3c' });
+        Swal.fire({ icon: 'error', title: 'อยู่นอกพื้นที่', html: `คุณห่างจากศูนย์ฯ ${Math.round(distanceToCenter)} เมตร<br>ต้องอยู่ในระยะ ${ALLOWED_RADIUS} เมตรเท่านั้น ถึงจะลงทะเบียนได้ครับ`, confirmButtonColor: '#e74c3c' });
         return;
       }
 
@@ -291,12 +294,11 @@
       async function scanLoop() {
         if (!isScanning) return; 
 
-        // 🚨 บล็อกกล้องไม่ให้วิเคราะห์หน้า ถ้านอกพื้นที่
         if (!isWithinArea) {
           wrapper.classList.remove('scanning');
           wrapper.classList.add('error');
           setStatus("error", `อยู่นอกพื้นที่ (ห่าง ${Math.round(distanceToCenter)} ม.) ระบบล็อก`);
-          setTimeout(scanLoop, 2000); // พักรอ 2 วินาทีแล้วเช็คใหม่
+          setTimeout(scanLoop, 2000); 
           return;
         }
 
@@ -332,11 +334,11 @@
               } else {
                 await Swal.fire({
                   icon: 'success', title: timeInfo.type === 'เข้า' ? 'เข้างานสำเร็จ!' : 'ออกงานสำเร็จ!',
-                  html: `<div style="text-align:left; display:inline-block; margin-top:10px; background:#f4f6f9; padding:15px; border-radius:10px;">
-                           <b>👤 ชื่อ:</b> <span style="color:var(--primary); font-size:18px;">${match.label}</span><br>
-                           <b>📅 วันที่:</b> ${dateStr}<br>
-                           <b>⏰ เวลา:</b> ${timeStr} น.<br>
-                           <b>📌 สถานะ:</b> <span style="color:${timeInfo.status === 'สาย' ? 'red' : 'green'}; font-weight:bold;">${timeInfo.status}</span>
+                  html: `<div style="text-align:left; display:inline-block; margin-top:10px; background:#f4f6f9; padding:15px; border-radius:10px; line-height: 1.8;">
+                           <b style="color:var(--text-light);"><i class="fa-solid fa-user"></i> ชื่อ:</b> <span style="color:var(--primary); font-size:18px; font-weight:bold;">${match.label}</span><br>
+                           <b style="color:var(--text-light);"><i class="fa-regular fa-calendar-days"></i> วันที่:</b> ${dateStr}<br>
+                           <b style="color:var(--text-light);"><i class="fa-regular fa-clock"></i> เวลา:</b> ${timeStr} น.<br>
+                           <b style="color:var(--text-light);"><i class="fa-solid fa-thumbtack"></i> สถานะ:</b> <span style="color:${timeInfo.status === 'สาย' ? 'red' : 'green'}; font-weight:bold;">${timeInfo.status}</span>
                          </div>`,
                   timer: 3500, showConfirmButton: false
                 });
